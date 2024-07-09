@@ -67,32 +67,31 @@ response_synthesizer = get_response_synthesizer(
 # Sentence splitter
 splitter = LangchainNodeParser(RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200))
 
+Settings.transformations = [splitter]
 
 # Vector store
-db = chromadb.PersistentClient(path="./chroma_db")
-chroma_collection = db.get_or_create_collection("shopping")
-vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+@st.cache_resource
+def vectorstore():
+    db = chromadb.PersistentClient(path="./chroma_db")
+    chroma_collection = db.get_or_create_collection("shopping")
+    vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+    storage_context = StorageContext.from_defaults(vector_store=vector_store)
+    index = VectorStoreIndex.from_documents(
+        documents, storage_context=storage_context, show_progress=True
+    )
+    # Re-initialize ChromaDB client and collection
+    db2 = chromadb.PersistentClient(path="./chroma_db")
+    chroma_collection = db2.get_or_create_collection("shopping")
+    vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
 
-# Storage context
-storage_context = StorageContext.from_defaults(vector_store=vector_store)
+    # Load index from vector store
+    index = VectorStoreIndex.from_vector_store(
+        vector_store,
+        transformations=[splitter]
+    )
+    return index
 
-# Create index
-index = VectorStoreIndex.from_documents(
-    documents, storage_context=storage_context, show_progress=True, transformations=[splitter]
-)
-
-
-# Re-initialize ChromaDB client and collection
-db2 = chromadb.PersistentClient(path="./chroma_db")
-chroma_collection = db2.get_or_create_collection("shopping")
-vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-
-# Load index from vector store
-index = VectorStoreIndex.from_vector_store(
-    vector_store,
-    transformations=[splitter]
-)
-
+index = vectorstore()
 
 retriever = VectorIndexRetriever(index = index, similarity_top_k=7)
 # Query engine
